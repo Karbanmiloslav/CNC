@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CNC Časovač - lepší design</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #74ebd5 0%, #ACB6E5 100%);
+      margin: 0;
+      padding: 20px;
+      color: #222;
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    #inputArea {
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    #inputArea input {
+      width: 60%;
+      padding: 8px;
+      font-size: 1em;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    #inputArea button {
+      padding: 9px 15px;
+      font-size: 1em;
+      margin-left: 10px;
+      border: none;
+      border-radius: 5px;
+      background-color: #3467eb;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    #inputArea button:hover {
+      background-color: #274bb5;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      background-color: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 12px 8px;
+      border-bottom: 1px solid #ddd;
+      text-align: center;
+    }
+    th {
+      background-color: #3467eb;
+      color: white;
+      font-weight: 600;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    button.start, button.stop {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.start {
+      background-color: #4CAF50;
+      color: white;
+    }
+    button.start:hover {
+      background-color: #3e8e41;
+    }
+    button.stop {
+      background-color: #f44336;
+      color: white;
+    }
+    button.stop:hover {
+      background-color: #d32f2f;
+    }
+    #exportBtn {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 1em;
+      border: none;
+      border-radius: 5px;
+      background-color: #3467eb;
+      color: white;
+      cursor: pointer;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      transition: background-color 0.3s ease;
+    }
+    #exportBtn:hover {
+      background-color: #274bb5;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Evidence výroby CNC - testovací verze</h2>
+
+  <div id="inputArea">
+    <input type="text" id="kusyInput" placeholder="Zadej názvy kusů oddělené čárkou, např. Kryt 001,Hlavice 002,Osa 003" />
+    <button onclick="nactiKusy()">Načíst kusy</button>
+  </div>
+
+  <table id="kusTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>Název kusu</th>
+        <th>Start čas</th>
+        <th>Stop čas</th>
+        <th>Doba (min)</th>
+        <th>Start</th>
+        <th>Stop</th>
+      </tr>
+    </thead>
+    <tbody id="kusTableBody">
+      <!-- Data se vloží sem -->
+    </tbody>
+  </table>
+
+  <button id="exportBtn" style="display:none;" onclick="exportToExcel()">Exportovat do Excelu</button>
+
+  <script>
+    let kusy = [];
+
+    function nactiKusy() {
+      const input = document.getElementById("kusyInput").value.trim();
+      if (!input) {
+        alert("Prosím zadej alespoň jeden název kusu.");
+        return;
+      }
+
+      kusy = input.split(",").map(k => ({ nazev: k.trim(), start: null, stop: null, doba: null }));
+
+      const table = document.getElementById("kusTable");
+      const tbody = document.getElementById("kusTableBody");
+      const exportBtn = document.getElementById("exportBtn");
+
+      tbody.innerHTML = "";
+      kusy.forEach((kus, index) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${kus.nazev}</td>
+          <td id="start-${index}">-</td>
+          <td id="stop-${index}">-</td>
+          <td id="doba-${index}">-</td>
+          <td><button class="start" onclick="startTime(${index})">Start</button></td>
+          <td><button class="stop" onclick="stopTime(${index})">Stop</button></td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      table.style.display = "table";
+      exportBtn.style.display = "block";
+    }
+
+    function formatTime(date) {
+      return date.toLocaleTimeString("cs-CZ");
+    }
+
+    function startTime(index) {
+      const now = new Date();
+      kusy[index].start = now;
+      document.getElementById(`start-${index}`).textContent = formatTime(now);
+      // reset stop a doba při novém startu
+      kusy[index].stop = null;
+      kusy[index].doba = null;
+      document.getElementById(`stop-${index}`).textContent = "-";
+      document.getElementById(`doba-${index}`).textContent = "-";
+    }
+
+    function stopTime(index) {
+      const now = new Date();
+      if (!kusy[index].start) {
+        alert("Nejdřív musíš zmáčknout Start.");
+        return;
+      }
+      kusy[index].stop = now;
+      const dobaMin = Math.round((now - kusy[index].start) / 60000);
+      kusy[index].doba = dobaMin;
+
+      document.getElementById(`stop-${index}`).textContent = formatTime(now);
+      document.getElementById(`doba-${index}`).textContent = dobaMin;
+    }
+
+    function exportToExcel() {
+      const exportData = kusy.map(kus => ({
+        "Název kusu": kus.nazev,
+        "Start čas": kus.start ? formatTime(kus.start) : "",
+        "Stop čas": kus.stop ? formatTime(kus.stop) : "",
+        "Doba (min)": kus.doba !== null ? kus.doba : ""
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Výroba");
+
+      XLSX.writeFile(workbook, "vyroba_export.xlsx");
+    }
+  </script>
+
+</body>
+</html>

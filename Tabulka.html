@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CNC Časovač - Web Verze</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; background: #f0f2f5; padding: 20px; }
+h2 { text-align: center; }
+#inputArea, #fileArea, #buttons { text-align: center; margin-bottom: 15px; }
+input[type=text] { width: 60%; padding: 8px; border-radius: 5px; border: 1px solid #ccc; }
+button { padding: 8px 15px; margin: 3px; border-radius: 5px; border: none; cursor: pointer; }
+button:hover { opacity: 0.85; }
+table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }
+th { background-color: #3467eb; color: white; }
+.start { background-color: #4CAF50; color: white; }
+.stop { background-color: #f44336; color: white; }
+.add { background-color: #3467eb; color: white; }
+.delete { background-color: #ff9800; color: white; }
+</style>
+</head>
+<body>
+
+<h2>CNC Časovač - Web Verze</h2>
+
+<div id="inputArea">
+<input type="text" id="kusyInput" placeholder="Název kusu">
+<button onclick="addKus()">Přidat kus</button>
+</div>
+
+<div id="fileArea">
+<input type="file" id="excelFile" accept=".xlsx">
+<button onclick="loadFromExcel()">Načíst z Excelu</button>
+</div>
+
+<div id="buttons">
+<button onclick="deleteSelected()">Smazat vybrané</button>
+<button onclick="deleteAll()">Smazat vše</button>
+<button onclick="exportToExcel()">Export do Excelu</button>
+</div>
+
+<table id="kusTable">
+<thead>
+<tr>
+<th>#</th>
+<th>Název kusu</th>
+<th>Start</th>
+<th>Stop</th>
+<th>Doba (min)</th>
+<th>Start přípravy</th>
+<th>Stop přípravy</th>
+<th>Doba přípravy (min)</th>
+<th>Akce</th>
+</tr>
+</thead>
+<tbody id="tableBody"></tbody>
+</table>
+
+<script>
+let kusy = [];
+
+function formatTime(date) {
+    return date ? date.toLocaleTimeString('cs-CZ') : '-';
+}
+
+function addKus() {
+    const inputEl = document.getElementById("kusyInput");
+    const nazev = inputEl.value.trim();
+    if (!nazev) { 
+        alert("Zadej název kusu"); 
+        return; 
+    }
+
+    kusy.push({
+        nazev: nazev,
+        start: null,
+        stop: null,
+        doba: null,
+        prepStart: null,
+        prepStop: null,
+        prepDoba: null
+    });
+
+    inputEl.value = ''; // vyčistí input
+    renderTable();
+}
+
+function renderTable() {
+    const tbody = document.getElementById("tableBody");
+    tbody.innerHTML = '';
+    kusy.forEach((k, i) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${i+1}</td>
+            <td>${k.nazev}</td>
+            <td>${formatTime(k.start)}</td>
+            <td>${formatTime(k.stop)}</td>
+            <td>${k.doba !== null ? k.doba : '-'}</td>
+            <td>${formatTime(k.prepStart)}</td>
+            <td>${formatTime(k.prepStop)}</td>
+            <td>${k.prepDoba !== null ? k.prepDoba : '-'}</td>
+            <td>
+                <button class="start" onclick="startTime(${i})">Start</button>
+                <button class="stop" onclick="stopTime(${i})">Stop</button>
+                <button class="start" onclick="startPrep(${i})">Start Příprava</button>
+                <button class="stop" onclick="stopPrep(${i})">Stop Příprava</button>
+                <input type="checkbox" class="selectRow">
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function startTime(i) {
+    kusy[i].start = new Date();
+    kusy[i].stop = null; kusy[i].doba = null;
+    renderTable();
+}
+
+function stopTime(i) {
+    if(!kusy[i].start) { alert("Nejdřív start!"); return; }
+    kusy[i].stop = new Date();
+    kusy[i].doba = Math.round((kusy[i].stop - kusy[i].start)/60000);
+    renderTable();
+}
+
+function startPrep(i) {
+    kusy[i].prepStart = new Date();
+    kusy[i].prepStop = null; kusy[i].prepDoba = null;
+    renderTable();
+}
+
+function stopPrep(i) {
+    if(!kusy[i].prepStart) { alert("Nejdřív start přípravy!"); return; }
+    kusy[i].prepStop = new Date();
+    kusy[i].prepDoba = Math.round((kusy[i].prepStop - kusy[i].prepStart)/60000);
+    renderTable();
+}
+
+function deleteSelected() {
+    const checkboxes = document.querySelectorAll(".selectRow");
+    kusy = kusy.filter((_, i) => !checkboxes[i].checked);
+    renderTable();
+}
+
+function deleteAll() {
+    if(confirm("Opravdu smazat vše?")) {
+        kusy = [];
+        renderTable();
+    }
+}
+
+function exportToExcel() {
+    const data = kusy.map(k => ({
+        "Název kusu": k.nazev,
+        "Start": k.start ? formatTime(k.start) : '',
+        "Stop": k.stop ? formatTime(k.stop) : '',
+        "Doba (min)": k.doba !== null ? k.doba : '',
+        "Start přípravy": k.prepStart ? formatTime(k.prepStart) : '',
+        "Stop přípravy": k.prepStop ? formatTime(k.prepStop) : '',
+        "Doba přípravy (min)": k.prepDoba !== null ? k.prepDoba : ''
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Kusy");
+    XLSX.writeFile(wb, "vyroba.xlsx");
+}
+
+function loadFromExcel() {
+    const file = document.getElementById("excelFile").files[0];
+    if(!file) { alert("Vyber soubor"); return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, {type:"array"});
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet);
+        json.forEach(row => addKus(row["Název kusu"] || row["Name"] || "Kus"));
+    }
+    reader.readAsArrayBuffer(file);
+}
+</script>
+
+</body>
+</html>
